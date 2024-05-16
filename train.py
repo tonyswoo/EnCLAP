@@ -145,23 +145,8 @@ def main():
     )
 
     with accelerator.main_process_first():
-        train_dataset = raw_datasets["train"].map(
+        train_dataset = raw_datasets["train"].with_transform(
             preprocessor.preprocess_train,
-            num_proc=args.preprocessing_num_workers,
-            load_from_cache_file=not args.overwrite_cache,
-            desc="Running tokenizer on dataset",
-        )
-        train_dataset.set_format(
-            "pt",
-            columns=[
-                "input_ids",                
-                "clap_embedding",
-                "encodec_mask",
-                "attention_mask",
-                "mcm_labels",
-                "labels",
-                "decoder_attention_mask",
-            ],
         )
 
         # Temporarily set max_target_length for validation.
