@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from random import randint
@@ -40,7 +41,9 @@ class Preprocessor:
         attention_mask = np.ones(min(encodec.shape[0] + 3, self.max_length)).astype(
             np.int64
         )
-        target_text = self.tokenizer(text_target=example["caption"])
+        
+        caption = re.sub(r'[^\w\s]', '', example["caption"]).lower()
+        target_text = self.tokenizer(text_target=caption)
 
         if encodec.shape[0] + 3 > self.max_length:
             start = randint(0, encodec.shape[0] - self.max_length + 3)
@@ -109,7 +112,8 @@ class Preprocessor:
 
         captions = []
         for i in range(self.num_eval_captions):
-            captions.append(example[f"caption_{i+1}"])
+            caption = re.sub(r'[^\w\s]', '', example[f"caption_{i+1}"]).lower()
+            captions.append(caption)
 
         return {
             "input_ids": encodec,
