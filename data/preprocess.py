@@ -32,58 +32,68 @@ class Preprocessor:
             self.tokenizer = BartTokenizerFast.from_pretrained(self.tokenizer)
 
     def preprocess_train(self, example):
-        path = example["file_path"]
-        encodec = np.load(self.encodec_base_path / path)
-        clap_embedding = np.load(self.clap_base_path / path)
-        encodec_mask = np.array(
-            [0, 0] + [1] * min(encodec.shape[0], self.max_length - 2) + [0]
-        )
-        attention_mask = np.ones(min(encodec.shape[0] + 3, self.max_length+1)).astype(
-            np.int64
-        )
-        
-        target_text = self.tokenizer(text_target=example["caption"])
-        
-        if encodec.shape[0] + 2 > self.max_length:
-            start = randint(0, encodec.shape[0] - self.max_length + 2)
-            encodec = encodec[start : start + self.max_length - 2]
+        output = {
+            "input_ids": [],
+            "clap_embedding": [],
+            "encodec_mask": [],
+            "attention_mask": [],
+            "mcm_labels": [],
+            "labels": [],
+            "decoder_attention_mask": []
+        }
 
-        mcm_labels = None
-        if self.mcm_masking_prob > 0:
-            num_rvq = encodec.shape[-1]
-            mcm_mask, _ = _compute_mask_indices(
-                encodec.T.shape, self.mcm_masking_prob, self.mcm_masking_span
+        for file_path, caption in zip(example["file_path"], example["caption"]):
+            encodec = np.load(self.encodec_base_path / file_path)
+            clap_embedding = np.load(self.clap_base_path / file_path)
+            encodec_mask = np.array(
+                [0, 0] + [1] * min(encodec.shape[0], self.max_length - 2) + [0]
             )
-            mcm_mask = mcm_mask.T
-            mcm_labels = np.where(mcm_mask, encodec, self.label_pad_token_id)
-            mcm_labels = np.concatenate(
+            attention_mask = np.ones(min(encodec.shape[0] + 3, self.max_length+1)).astype(
+                np.int64
+            )
+            
+            target_text = self.tokenizer(text_target=caption)
+            
+            if encodec.shape[0] + 2 > self.max_length:
+                start = randint(0, encodec.shape[0] - self.max_length + 2)
+                encodec = encodec[start : start + self.max_length - 2]
+
+            mcm_labels = None
+            if self.mcm_masking_prob > 0:
+                num_rvq = encodec.shape[-1]
+                mcm_mask, _ = _compute_mask_indices(
+                    encodec.T.shape, self.mcm_masking_prob, self.mcm_masking_span
+                )
+                mcm_mask = mcm_mask.T
+                mcm_labels = np.where(mcm_mask, encodec, self.label_pad_token_id)
+                mcm_labels = np.concatenate(
+                    [
+                        np.ones((2, num_rvq), dtype=np.int64) * self.label_pad_token_id,
+                        mcm_labels,
+                        np.ones((1, num_rvq), dtype=np.int64) * self.label_pad_token_id,
+                    ],
+                    axis=0,
+                )
+                encodec[mcm_mask] = self.mask_token_id
+
+            encodec = np.concatenate(
                 [
-                    np.ones((2, num_rvq), dtype=np.int64) * self.label_pad_token_id,
-                    mcm_labels,
-                    np.ones((1, num_rvq), dtype=np.int64) * self.label_pad_token_id,
+                    np.ones((2, num_rvq), dtype=np.int64) * self.tokenizer.bos_token_id,
+                    encodec,
+                    np.ones((1, num_rvq), dtype=np.int64) * self.tokenizer.eos_token_id,
                 ],
                 axis=0,
             )
-            encodec[mcm_mask] = self.mask_token_id
 
-        encodec = np.concatenate(
-            [
-                np.ones((2, num_rvq), dtype=np.int64) * self.tokenizer.bos_token_id,
-                encodec,
-                np.ones((1, num_rvq), dtype=np.int64) * self.tokenizer.eos_token_id,
-            ],
-            axis=0,
-        )
+            output["input_ids"].append(torch.tensor(encodec))
+            output["clap_embedding"].append(torch.tensor(clap_embedding))
+            output["encodec_mask"].append(torch.tensor(encodec_mask))
+            output["attention_mask"].append(torch.tensor(attention_mask))
+            output["mcm_labels"].append(torch.tensor(mcm_labels))
+            output["labels"].append(torch.tensor(target_text["input_ids"]))
+            output["decoder_attention_mask"].append(torch.tensor(target_text["attention_mask"]))
 
-        return {
-            "input_ids": torch.Tensor(encodec),
-            "clap_embedding": torch.Tensor(clap_embedding),
-            "encodec_mask": torch.Tensor(encodec_mask),
-            "attention_mask": torch.Tensor(attention_mask),
-            "mcm_labels": torch.Tensor(mcm_labels),
-            "labels": torch.Tensor(target_text["input_ids"]),
-            "decoder_attention_mask": torch.Tensor(target_text["attention_mask"])
-        }
+        return output
 
     def preprocess_eval(self, example):
         path = example["file_path"]
