@@ -42,9 +42,8 @@ class Preprocessor:
             np.int64
         )
         
-        caption = re.sub(r'[^\w\s]', '', example["caption"]).lower()
-        target_text = self.tokenizer(text_target=caption)
-
+        target_text = self.tokenizer(text_target=example["caption"])
+        
         if encodec.shape[0] + 2 > self.max_length:
             start = randint(0, encodec.shape[0] - self.max_length + 2)
             encodec = encodec[start : start + self.max_length - 2]
@@ -112,8 +111,7 @@ class Preprocessor:
 
         captions = []
         for i in range(self.num_eval_captions):
-            caption = re.sub(r'[^\w\s]', '', example[f"caption_{i+1}"]).lower()
-            captions.append(caption)
+            captions.append(example[f"caption_{i+1}"])
 
         return {
             "input_ids": encodec,
