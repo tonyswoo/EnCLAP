@@ -74,13 +74,13 @@ class Preprocessor:
         )
 
         return {
-            "input_ids": encodec,
-            "clap_embedding": clap_embedding,
-            "encodec_mask": encodec_mask,
-            "attention_mask": attention_mask,
-            "mcm_labels": mcm_labels,
-            "labels": target_text["input_ids"],
-            "decoder_attention_mask": target_text["attention_mask"]
+            "input_ids": torch.Tensor(encodec),
+            "clap_embedding": torch.Tensor(clap_embedding),
+            "encodec_mask": torch.Tensor(encodec_mask),
+            "attention_mask": torch.Tensor(attention_mask),
+            "mcm_labels": torch.Tensor(mcm_labels),
+            "labels": torch.Tensor(target_text["input_ids"]),
+            "decoder_attention_mask": torch.Tensor(target_text["attention_mask"])
         }
 
     def preprocess_eval(self, example):
