@@ -19,7 +19,7 @@ class Preprocessor:
     mcm_masking_prob: float = 0.15
     mcm_masking_span: int = 10
     label_pad_token_id: int = -100
-    mask_token_id: int = 1024
+    mask_token_id: int = 1025
     num_eval_captions: int = 5
 
     def __post_init__(self):
@@ -35,16 +35,16 @@ class Preprocessor:
         encodec = np.load(self.encodec_base_path / path)
         clap_embedding = np.load(self.clap_base_path / path)
         encodec_mask = np.array(
-            [0, 0] + [1] * min(encodec.shape[0], self.max_length - 3) + [0]
+            [0, 0] + [1] * min(encodec.shape[0], self.max_length - 2) + [0]
         )
-        attention_mask = np.ones(min(encodec.shape[0] + 3, self.max_length)).astype(
+        attention_mask = np.ones(min(encodec.shape[0] + 3, self.max_length+1)).astype(
             np.int64
         )
         target_text = self.tokenizer(text_target=example["caption"])
 
-        if encodec.shape[0] + 3 > self.max_length:
-            start = randint(0, encodec.shape[0] - self.max_length + 3)
-            encodec = encodec[start : start + self.max_length - 3]
+        if encodec.shape[0] + 2 > self.max_length:
+            start = randint(0, encodec.shape[0] - self.max_length + 2)
+            encodec = encodec[start : start + self.max_length - 2]
 
         mcm_labels = None
         if self.mcm_masking_prob > 0:
@@ -88,14 +88,14 @@ class Preprocessor:
         encodec = np.load(self.encodec_base_path / path)
         clap_embedding = np.load(self.clap_base_path / path)
         encodec_mask = np.array(
-            [0, 0] + [1] * min(encodec.shape[0], self.max_length - 3) + [0]
+            [0, 0] + [1] * min(encodec.shape[0], self.max_length - 2) + [0]
         )
-        attention_mask = np.ones(min(encodec.shape[0] + 3, self.max_length)).astype(
+        attention_mask = np.ones(min(encodec.shape[0] + 3, self.max_length+1)).astype(
             np.int64
         )
 
-        if encodec.shape[0] + 3 > self.max_length:
-            encodec = encodec[: self.max_length - 3]
+        if encodec.shape[0] + 2 > self.max_length:
+            encodec = encodec[: self.max_length - 2]
 
         num_rvq = encodec.shape[-1]
         encodec = np.concatenate(
