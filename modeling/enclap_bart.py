@@ -5,6 +5,10 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
+from transformers.modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask, 
+    _prepare_4d_attention_mask_for_sdpa
+)
 from transformers.modeling_outputs import (
     BaseModelOutput,
     Seq2SeqLMOutput,
@@ -18,7 +22,6 @@ from transformers.models.bart.modeling_bart import (
     BartLearnedPositionalEmbedding,
     BartModel,
     BartPretrainedModel,
-    _expand_mask,
     shift_tokens_right,
 )
 from transformers.utils import logging
@@ -97,6 +100,8 @@ class EnClapBartEncoder(BartPretrainedModel):
         self.layers = nn.ModuleList(
             [BartEncoderLayer(config) for _ in range(config.encoder_layers)]
         )
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
@@ -196,7 +201,7 @@ class EnClapBartEncoder(BartPretrainedModel):
                 for i, embed in enumerate(self.embed_encodec):
                     encodec_embeds = encodec_embeds + embed(encodec_ids[..., i])
                 bart_ids = torch.where(encodec_mask == 0, input_ids[..., 0], 0)
-                bart_embeds = self.embed_tokens(bart_ids)
+                bart_embeds = self.embed_tokens(bart_ids) * self.embed_scale
                 input_embeds = torch.where(
                     encodec_mask.unsqueeze(-1) > 0, encodec_embeds, bart_embeds
                 )
@@ -225,8 +230,16 @@ class EnClapBartEncoder(BartPretrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            if self._use_flash_attention_2:
+                attention_mask = attention_mask if 0 in attention_mask else None
+            elif self._use_sdpa and head_mask is None and not output_attentions:
+                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -250,18 +263,12 @@ class EnClapBartEncoder(BartPretrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
