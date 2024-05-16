@@ -128,7 +128,6 @@ def main():
         args.val_max_target_length = args.max_target_length
 
     # Set max encodec length based on the shape of the positional encoding
-    max_encodec_length = model.config.max_position_embeddings - 2
     label_pad_token_id = (
         -100 if args.ignore_pad_token_for_loss else tokenizer.pad_token_id
     )
@@ -140,7 +139,7 @@ def main():
         args.encodec_masking_prob,
         args.encodec_masking_span,
         label_pad_token_id,
-        model.config.encodec_vocab_size,
+        model.config.encodec_vocab_size + 1,
         args.eval_num_captions,
     )
 
@@ -182,7 +181,6 @@ def main():
         model=model,
         return_tensors="pt",
         label_pad_token_id=label_pad_token_id,
-        max_length=max_encodec_length,
         num_rvq=config.num_rvq,
         input_pad_token_id=config.encodec_pad_token_id
     )
@@ -191,7 +189,6 @@ def main():
         model=model,
         return_tensors="pt",
         label_pad_token_id=label_pad_token_id,
-        max_length=max_encodec_length,
         num_rvq=config.num_rvq,
         input_pad_token_id=config.encodec_pad_token_id
     )

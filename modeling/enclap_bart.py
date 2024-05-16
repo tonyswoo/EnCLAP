@@ -208,11 +208,11 @@ class EnClapBartEncoder(BartPretrainedModel):
                     inputs_embeds = input_embeds.to(self.device)
 
         batch_size = input_ids.size(0)
-        embed_pos = self.embed_positions(input_ids).to(self.device)
+        embed_pos = self.embed_positions(input_ids[:, 1:]).to(self.device)
         embed_pos = torch.cat(
             [
                 torch.zeros(batch_size, 1, self.config.d_model).to(self.device),
-                embed_pos[:, :-1],
+                embed_pos,
             ],
             dim=1,
         )

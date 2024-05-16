@@ -48,7 +48,7 @@ class EnClap:
             "pad_token_id": 1,
             "max_length": 50,
         }
-        self.max_seq_len = config.max_position_embeddings - 3
+        self.max_seq_len = config.max_position_embeddings - 2
 
     @torch.no_grad()
     def infer_from_audio_file(
