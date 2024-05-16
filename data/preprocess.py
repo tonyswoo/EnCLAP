@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from random import randint
@@ -40,7 +41,9 @@ class Preprocessor:
         attention_mask = np.ones(min(encodec.shape[0] + 3, self.max_length+1)).astype(
             np.int64
         )
-        target_text = self.tokenizer(text_target=example["caption"])
+        
+        caption = re.sub(r'[^\w\s]', '', example["caption"]).lower()
+        target_text = self.tokenizer(text_target=caption)
 
         if encodec.shape[0] + 2 > self.max_length:
             start = randint(0, encodec.shape[0] - self.max_length + 2)
@@ -74,13 +77,13 @@ class Preprocessor:
         )
 
         return {
-            "input_ids": encodec,
-            "clap_embedding": clap_embedding,
-            "encodec_mask": encodec_mask,
-            "attention_mask": attention_mask,
-            "mcm_labels": mcm_labels,
-            "labels": target_text["input_ids"],
-            "decoder_attention_mask": target_text["attention_mask"]
+            "input_ids": torch.Tensor(encodec),
+            "clap_embedding": torch.Tensor(clap_embedding),
+            "encodec_mask": torch.Tensor(encodec_mask),
+            "attention_mask": torch.Tensor(attention_mask),
+            "mcm_labels": torch.Tensor(mcm_labels),
+            "labels": torch.Tensor(target_text["input_ids"]),
+            "decoder_attention_mask": torch.Tensor(target_text["attention_mask"])
         }
 
     def preprocess_eval(self, example):
@@ -109,7 +112,8 @@ class Preprocessor:
 
         captions = []
         for i in range(self.num_eval_captions):
-            captions.append(example[f"caption_{i+1}"])
+            caption = re.sub(r'[^\w\s]', '', example[f"caption_{i+1}"]).lower()
+            captions.append(caption)
 
         return {
             "input_ids": encodec,
