@@ -136,16 +136,26 @@ def main():
         args.clap_base_path,
         tokenizer,
         model.config.max_position_embeddings,
-        args.encodec_masking_prob,
-        args.encodec_masking_span,
-        label_pad_token_id,
-        model.config.encodec_vocab_size + 1,
         args.eval_num_captions,
     )
 
     with accelerator.main_process_first():
-        train_dataset = raw_datasets["train"].with_transform(
+        train_dataset = raw_datasets["train"].map(
             preprocessor.preprocess_train,
+            num_proc=args.preprocessing_num_workers,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on dataset",
+        )
+        train_dataset.set_format(
+            "pt",
+            columns=[
+                "input_ids",                
+                "clap_embedding",
+                "encodec_mask",
+                "attention_mask",
+                "labels",
+                "decoder_attention_mask",
+            ],
         )
 
         # Temporarily set max_target_length for validation.
@@ -165,6 +175,9 @@ def main():
         tokenizer=tokenizer,
         model=model,
         return_tensors="pt",
+        mcm_masking_prob=args.encodec_masking_prob,
+        mcm_masking_span=args.encodec_masking_span,
+        mask_token_id=model.config.encodec_vocab_size + 1,
         label_pad_token_id=label_pad_token_id,
         num_rvq=config.num_rvq,
         input_pad_token_id=config.encodec_pad_token_id
